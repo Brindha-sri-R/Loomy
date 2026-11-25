@@ -265,15 +265,6 @@ Production deployment requires:
 - Additional account management features.
 - Performance and accessibility improvements.
 
-## 👩‍💻 Developer
-
-**Brindha Sri**
-
-Full Stack Developer | ECE Student | Technology Enthusiast
-
-- GitHub: [@Brindha-sri-R](https://github.com/Brindha-sri-R)
-
----
 
 <p align="center">
   <strong>LOOMY</strong>
