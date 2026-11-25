@@ -1,0 +1,17 @@
+import express from 'express';
+import {
+  addToWishlist,
+  getWishlist,
+  removeFromWishlist,
+} from '../controllers/wishlistController.js';
+import { protect } from '../middleware/authMiddleware.js';
+import { wishlistValidator } from '../validators/commerceValidator.js';
+
+const router = express.Router();
+
+router.use(protect);
+router.get('/', getWishlist);
+router.post('/', wishlistValidator, addToWishlist);
+router.delete('/:productId', removeFromWishlist);
+
+export default router;

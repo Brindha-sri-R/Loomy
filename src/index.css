@@ -1,0 +1,259 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-serif: 'Instrument Serif', Georgia, serif;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    background-color: #f4f4f6;
+    color: #111111;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+.dashed-grid-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+.dashed-grid-overlay > div {
+  border-right: 1px dashed rgba(17, 17, 17, 0.055);
+  height: 100%;
+}
+
+.dashed-grid-overlay > div:first-child {
+  border-left: 1px dashed rgba(17, 17, 17, 0.055);
+}
+
+@keyframes loomy-marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-loomy-marquee {
+  display: flex;
+  width: max-content;
+  animation: loomy-marquee 30s linear infinite;
+}
+
+.animate-loomy-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes loomy-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes loomy-hero-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes loomy-float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes loomy-heart-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.32);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-page-enter {
+  animation: loomy-fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-hero-model {
+  animation: loomy-hero-scale 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-hero-type {
+  animation: loomy-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+.animate-hero-card {
+  animation: loomy-fade-up 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.22s both;
+}
+
+.animate-float-slow {
+  animation: loomy-float 5s ease-in-out infinite;
+}
+
+.animate-heart-pop {
+  animation: loomy-heart-pop 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 3D Sculpture & Logo Reveal */
+@keyframes loomy-spin-3d {
+  0% {
+    transform: rotateX(14deg) rotateY(0deg) rotateZ(0deg);
+  }
+  50% {
+    transform: rotateX(-12deg) rotateY(180deg) rotateZ(4deg);
+  }
+  100% {
+    transform: rotateX(14deg) rotateY(360deg) rotateZ(0deg);
+  }
+}
+
+@keyframes loomy-orbit-ring {
+  0% {
+    transform: rotateX(72deg) rotateY(12deg) rotateZ(0deg);
+  }
+  100% {
+    transform: rotateX(72deg) rotateY(12deg) rotateZ(360deg);
+  }
+}
+
+@keyframes loomy-logo-reveal {
+  0% {
+    opacity: 0;
+    transform: scale(0.86) rotateY(-18deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotateY(0deg);
+  }
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.animate-spin-3d {
+  animation: loomy-spin-3d 18s linear infinite;
+}
+
+.animate-orbit-ring {
+  animation: loomy-orbit-ring 14s linear infinite;
+}
+
+.animate-logo-reveal {
+  animation: loomy-logo-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Subtle LOOMY shimmer skeleton */
+@keyframes loomy-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.loomy-shimmer {
+  background: linear-gradient(90deg, #eaeaf0 25%, #f5f5f9 50%, #eaeaf0 75%);
+  background-size: 200% 100%;
+  animation: loomy-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes loomy-order-ring {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.22);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.22);
+    opacity: 0;
+  }
+}
+
+.animate-order-ring {
+  animation: loomy-order-ring 2.1s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-loomy-marquee,
+  .animate-page-enter,
+  .animate-hero-model,
+  .animate-hero-type,
+  .animate-hero-card,
+  .animate-float-slow,
+  .animate-heart-pop,
+  .animate-spin-3d,
+  .animate-orbit-ring,
+  .animate-logo-reveal,
+  .animate-order-ring {
+    animation: none !important;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
