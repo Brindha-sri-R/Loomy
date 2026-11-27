@@ -44,3 +44,11 @@ export const profileValidator = [
     .withMessage('Full name must be at least 2 characters'),
   validateRequest,
 ];
+
+export const googleAuthValidator = [
+  body('credential')
+    .trim()
+    .notEmpty()
+    .withMessage('Google credential token is required'),
+  validateRequest,
+];

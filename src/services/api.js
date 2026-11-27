@@ -1,5 +1,6 @@
 const API_BASE =
-  import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.PROD ? '/api' : 'http://localhost:5000/api');
 
 const TOKEN_KEY = 'loomy_jwt_token';
 
@@ -52,17 +53,28 @@ export const api = {
     request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   login: (payload) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
+  googleLogin: (credential) =>
+    request('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   getMe: () => request('/auth/me'),
   updateProfile: (payload) =>
     request('/auth/profile', { method: 'PUT', body: JSON.stringify(payload) }),
 
-  // Catalog
+  // Catalog & Reviews
   getProducts: (params = '') => request(`/products${params}`),
   getProduct: (id) => request(`/products/${id}`),
   searchProducts: (q) =>
     request(`/products/search?q=${encodeURIComponent(q)}`),
   getCategories: () => request('/categories'),
+  getProductReviews: (id) => request(`/products/${id}/reviews`),
+  createProductReview: (id, payload) =>
+    request(`/products/${id}/reviews`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 
   // Cart
   getCart: () => request('/cart'),
@@ -90,4 +102,13 @@ export const api = {
   createOrder: (payload) =>
     request('/orders', { method: 'POST', body: JSON.stringify(payload) }),
   getOrders: () => request('/orders'),
+  cancelOrder: (id) =>
+    request(`/orders/${id}/cancel`, { method: 'PATCH' }),
+
+  // Newsletter
+  subscribeNewsletter: (email) =>
+    request('/newsletter', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
 };

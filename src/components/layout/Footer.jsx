@@ -2,6 +2,7 @@ import { ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
+import { api } from '../../services/api';
 import LoomyLogo from '../ui/LoomyLogo';
 
 const SOCIAL_LINKS = [
@@ -25,13 +26,22 @@ const SOCIAL_LINKS = [
 
 export default function Footer() {
   const [email, setEmail] = useState('');
+  const [subscribing, setSubscribing] = useState(false);
   const { showToast } = useStore();
 
-  const handleSubscribe = (e) => {
+  const handleSubscribe = async (e) => {
     e.preventDefault();
-    if (!email.trim()) return;
-    showToast(`Subscribed ${email} to Loomy drops`);
-    setEmail('');
+    if (!email.trim() || subscribing) return;
+    setSubscribing(true);
+    try {
+      const res = await api.subscribeNewsletter(email.trim());
+      showToast(res.message || `Subscribed ${email} to LOOMY drops`, 'success');
+      setEmail('');
+    } catch (err) {
+      showToast(err?.message || 'Unable to subscribe right now.', 'error');
+    } finally {
+      setSubscribing(false);
+    }
   };
 
   return (
@@ -62,6 +72,7 @@ export default function Footer() {
               />
               <button
                 type="submit"
+                disabled={subscribing}
                 aria-label="Subscribe"
                 className="ml-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#111111] transition-transform hover:scale-105 active:scale-95"
               >

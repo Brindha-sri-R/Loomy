@@ -8,11 +8,12 @@ import {
   Star,
   Truck,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import ProductCard from '../components/product/ProductCard';
 import TiltCard from '../components/ui/TiltCard';
 import { useStore } from '../context/StoreContext';
+import { api } from '../services/api';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -22,7 +23,15 @@ export default function ProductDetailPage() {
 }
 
 function ProductDetailContent({ product, products }) {
-  const { addToCart, wishlist, toggleWishlist, setIsCartOpen } = useStore();
+  const {
+    addToCart,
+    wishlist,
+    toggleWishlist,
+    setIsCartOpen,
+    user,
+    setIsAuthOpen,
+    showToast,
+  } = useStore();
   const [selectedSize, setSelectedSize] = useState(product.sizes?.[0] || 'M');
   const [selectedColor, setSelectedColor] = useState(
     product.colors?.[0] || '#111111'
@@ -30,6 +39,58 @@ function ProductDetailContent({ product, products }) {
   const [activeImage, setActiveImage] = useState(product.image);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [quantity, setQuantity] = useState(1);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setReviewsLoading(true);
+    api
+      .getProductReviews(product._id || product.id)
+      .then((res) => {
+        if (active && Array.isArray(res?.reviews)) {
+          setReviews(res.reviews);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setReviewsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [product._id, product.id]);
+
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      setIsAuthOpen(true);
+      return;
+    }
+    if (reviewComment.trim().length < 3 || submittingReview) {
+      showToast('Please write at least 3 characters for your review.', 'error');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const res = await api.createProductReview(product._id || product.id, {
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+      });
+      if (res?.review) {
+        setReviews((prev) => [res.review, ...prev]);
+        setReviewComment('');
+        showToast('Review Submitted', 'success');
+      }
+    } catch (err) {
+      showToast(err?.message || 'Unable to submit review.', 'error');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
 
   const isWishlisted = wishlist.includes(product.id);
   const related = products.filter((p) => p.id !== product.id).slice(0, 3);
@@ -206,13 +267,13 @@ function ProductDetailContent({ product, products }) {
 
               <button
                 type="button"
-                onClick={() => {
-                  addToCart(product, {
+                onClick={async () => {
+                  const added = await addToCart(product, {
                     size: selectedSize,
                     color: selectedColor,
                     quantity,
                   });
-                  setIsCartOpen(true);
+                  if (added) setIsCartOpen(true);
                 }}
                 className="flex flex-1 items-center justify-between rounded-full bg-[#111111] py-2 pr-2 pl-6 text-xs font-semibold text-white transition-colors hover:bg-[#1e1e24]"
               >
@@ -248,6 +309,100 @@ function ProductDetailContent({ product, products }) {
                 <span>Sustainably crafted</span>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Customer Reviews */}
+        <div className="mt-16 rounded-[26px] border border-black/[0.06] bg-white p-6 sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-dashed border-black/15 pb-5">
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.15em] text-[#7C8BFF] uppercase">
+                VERIFIED REVIEWS
+              </p>
+              <h2 className="mt-1 text-xl font-bold tracking-tight text-[#111111]">
+                Customer Feedback ({reviews.length})
+              </h2>
+            </div>
+            {!user && (
+              <button
+                type="button"
+                onClick={() => setIsAuthOpen(true)}
+                className="rounded-full border border-black/15 px-4 py-2 text-xs font-semibold text-[#111111] hover:bg-black/5"
+              >
+                Sign In to Review
+              </button>
+            )}
+          </div>
+
+          {user && (
+            <form onSubmit={handleReviewSubmit} className="mt-6 space-y-3 border-b border-black/[0.06] pb-6">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-[#6E6E73]">Rating:</span>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    aria-label={`Rate ${star} stars`}
+                    className="p-0.5"
+                  >
+                    <Star
+                      className={`h-4 w-4 ${
+                        star <= reviewRating
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-black/20'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="text"
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  placeholder="Share your thoughts on fit, fabric, and finish..."
+                  className="flex-1 rounded-xl border border-black/10 px-4 py-2.5 text-sm outline-none focus:border-[#7C8BFF]"
+                />
+                <button
+                  type="submit"
+                  disabled={submittingReview}
+                  className="rounded-full bg-[#111111] px-6 py-2.5 text-xs font-semibold text-white hover:bg-[#7C8BFF] disabled:opacity-50"
+                >
+                  {submittingReview ? 'Posting...' : 'Post Review'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="mt-6 space-y-4">
+            {reviewsLoading ? (
+              <div className="loomy-shimmer h-16 rounded-2xl" />
+            ) : reviews.length === 0 ? (
+              <p className="text-sm text-[#6E6E73]">
+                No reviews yet. Be the first to review this piece.
+              </p>
+            ) : (
+              reviews.map((rev) => (
+                <div
+                  key={rev._id}
+                  className="rounded-2xl bg-[#F6F6F8] p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#111111]">
+                      {rev.userName}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#111111]">
+                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                      {rev.rating}.0
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-[#4E4E52]">
+                    {rev.comment}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

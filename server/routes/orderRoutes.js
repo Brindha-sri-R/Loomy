@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  cancelOrder,
   createOrder,
   getOrderById,
   getOrders,
@@ -13,5 +14,6 @@ router.use(protect);
 router.post('/', createOrderValidator, createOrder);
 router.get('/', getOrders);
 router.get('/:id', getOrderById);
+router.patch('/:id/cancel', cancelOrder);
 
 export default router;

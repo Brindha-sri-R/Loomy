@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getMe,
+  googleAuth,
   loginUser,
   logoutUser,
   registerUser,
@@ -8,6 +9,7 @@ import {
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import {
+  googleAuthValidator,
   loginValidator,
   profileValidator,
   registerValidator,
@@ -17,6 +19,7 @@ const router = express.Router();
 
 router.post('/register', registerValidator, registerUser);
 router.post('/login', loginValidator, loginUser);
+router.post('/google', googleAuthValidator, googleAuth);
 router.post('/logout', logoutUser);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, profileValidator, updateProfile);

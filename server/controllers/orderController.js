@@ -37,6 +37,11 @@ export async function createOrder(req, res, next) {
           .json({ message: `Product not found: ${id}` });
       }
       const qty = Math.max(1, Math.min(50, Number(entry.quantity || 1)));
+      if (typeof product.stock === 'number' && product.stock < qty) {
+        return res.status(400).json({
+          message: `Insufficient stock for ${product.name}`,
+        });
+      }
       const lineTotal = Number((product.price * qty).toFixed(2));
       totalAmount += lineTotal;
 
@@ -58,6 +63,14 @@ export async function createOrder(req, res, next) {
       shippingAddress,
       status: 'Confirmed',
     });
+
+    await Promise.all(
+      verifiedItems.map((item) =>
+        Product.findByIdAndUpdate(item.product, {
+          $inc: { stock: -item.quantity },
+        })
+      )
+    );
 
     await Cart.findOneAndUpdate({ user: req.user._id }, { items: [] });
 
@@ -87,6 +100,38 @@ export async function getOrderById(req, res, next) {
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
+    return res.json({ order });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function cancelOrder(req, res, next) {
+  try {
+    const order = await Order.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    if (!['Pending', 'Confirmed'].includes(order.status)) {
+      return res.status(400).json({
+        message: `Cannot cancel an order with status "${order.status}".`,
+      });
+    }
+
+    order.status = 'Cancelled';
+    await order.save();
+
+    await Promise.all(
+      order.items.map((item) =>
+        Product.findByIdAndUpdate(item.product, {
+          $inc: { stock: item.quantity },
+        })
+      )
+    );
+
     return res.json({ order });
   } catch (err) {
     next(err);

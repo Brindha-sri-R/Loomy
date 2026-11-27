@@ -1,25 +1,26 @@
 import {
+  AlertCircle,
   ArrowRight,
   CheckCircle2,
   Eye,
   EyeOff,
   Heart,
+  Loader2,
+  Lock,
   Minus,
   Plus,
   Search,
   ShoppingBag,
   Sparkles,
   Trash2,
-  Volume2,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../../context/StoreContext';
 import { FILTER_CATEGORIES, PRODUCTS } from '../../data/products';
 import { DrawerRowSkeleton } from '../product/ProductSkeleton';
 import LoomyLogo from '../ui/LoomyLogo';
-import { playOrderSuccessChime, unlockOrderAudio } from '../../utils/sound';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -33,31 +34,88 @@ export function CartDrawer() {
     removeFromCart,
     placeOrder,
     user,
+    requireAuth,
+    busyCartKeys,
     showToast,
   } = useStore();
   const [confirmedOrder, setConfirmedOrder] = useState(null);
   const [processingOrder, setProcessingOrder] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState('bag'); // 'bag' | 'shipping'
+  const [shipping, setShipping] = useState({
+    fullName: '',
+    address: '',
+    city: '',
+    postalCode: '',
+  });
+  const [shippingErrors, setShippingErrors] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isCartOpen) return;
     setLoading(true);
     setConfirmedOrder(null);
+    setCheckoutStep('bag');
+    setShippingErrors({});
+    if (user?.name) {
+      setShipping((prev) => ({
+        ...prev,
+        fullName: prev.fullName || user.name,
+      }));
+    }
     const t = window.setTimeout(() => setLoading(false), 220);
     return () => window.clearTimeout(t);
-  }, [isCartOpen]);
+  }, [isCartOpen, user]);
 
   if (!isCartOpen) return null;
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (e) => {
+    if (e) e.preventDefault();
     if (processingOrder) return;
-    unlockOrderAudio();
+    if (!user) {
+      setIsCartOpen(false);
+      requireAuth(
+        () => setIsCartOpen(true),
+        'Sign in to proceed to checkout and place your order.'
+      );
+      return;
+    }
+
+    if (checkoutStep === 'bag') {
+      setCheckoutStep('shipping');
+      return;
+    }
+
+    const nextErr = {};
+    if (shipping.fullName.trim().length < 2) {
+      nextErr.fullName = 'Recipient name is required.';
+    }
+    if (shipping.address.trim().length < 5) {
+      nextErr.address = 'Street address is required.';
+    }
+    if (shipping.city.trim().length < 2) {
+      nextErr.city = 'City is required.';
+    }
+    if (shipping.postalCode.trim().length < 3) {
+      nextErr.postalCode = 'Postal code is required.';
+    }
+    if (Object.keys(nextErr).length > 0) {
+      setShippingErrors(nextErr);
+      return;
+    }
+
     setProcessingOrder(true);
-    const order = await placeOrder();
-    playOrderSuccessChime();
-    setConfirmedOrder(order);
+    const order = await placeOrder({
+      fullName: shipping.fullName.trim(),
+      address: shipping.address.trim(),
+      city: shipping.city.trim(),
+      postalCode: shipping.postalCode.trim(),
+    });
     setProcessingOrder(false);
-    showToast('Order placed! Thank you for shopping with LOOMY.');
+    if (order) {
+      setConfirmedOrder(order);
+      setCheckoutStep('bag');
+      showToast('Order Placed Successfully', 'success');
+    }
   };
 
   return (
@@ -137,16 +195,7 @@ export function CartDrawer() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={playOrderSuccessChime}
-              className="mt-4 inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#6E6E73] transition-colors hover:text-[#111111]"
-            >
-              <Volume2 className="h-3.5 w-3.5 text-[#7C8BFF]" />
-              <span>Replay confirmation chime</span>
-            </button>
-
-            <div className="mt-5 flex w-full flex-col gap-2.5">
+            <div className="mt-6 flex w-full flex-col gap-2.5">
               {user ? (
                 <Link
                   to="/account"
@@ -172,6 +221,30 @@ export function CartDrawer() {
               </Link>
             </div>
           </div>
+        ) : !user ? (
+          <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F3F3F5] text-[#111111]">
+              <Lock className="h-5 w-5" />
+            </div>
+            <p className="mt-4 text-base font-semibold">Sign in to view your bag</p>
+            <p className="mt-1 max-w-xs text-sm text-[#6E6E73]">
+              Your shopping bag and checkout are protected by your LOOMY account.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setIsCartOpen(false);
+                requireAuth(
+                  () => setIsCartOpen(true),
+                  'Sign in to access your shopping bag and checkout.'
+                );
+              }}
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#111111] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#7C8BFF]"
+            >
+              Sign In to Continue
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
         ) : cart.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
             <p className="text-base font-semibold">Your bag is empty</p>
@@ -190,10 +263,15 @@ export function CartDrawer() {
         ) : (
           <>
             <div className="flex-1 space-y-4 overflow-y-auto p-6">
-              {cart.map((item, idx) => (
+              {cart.map((item, idx) => {
+                const itemKey = `${item.id}-${item.selectedSize}-${item.selectedColor}`;
+                const isBusy = busyCartKeys.includes(itemKey);
+                return (
                 <div
-                  key={`${item.id}-${item.selectedSize}-${item.selectedColor}`}
-                  className="flex gap-4 rounded-2xl bg-[#F6F6F8] p-3"
+                  key={itemKey}
+                  className={`flex gap-4 rounded-2xl bg-[#F6F6F8] p-3 transition-opacity ${
+                    isBusy ? 'opacity-65' : ''
+                  }`}
                 >
                   <img
                     src={item.image}
@@ -212,8 +290,9 @@ export function CartDrawer() {
                       </div>
                       <button
                         type="button"
+                        disabled={isBusy}
                         onClick={() => removeFromCart(idx)}
-                        className="text-[#6E6E73] hover:text-[#E11D48]"
+                        className="text-[#6E6E73] hover:text-[#E11D48] disabled:opacity-40"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -223,8 +302,9 @@ export function CartDrawer() {
                       <div className="flex items-center gap-2 rounded-full bg-white px-2 py-1">
                         <button
                           type="button"
+                          disabled={isBusy}
                           onClick={() => updateQuantity(idx, -1)}
-                          className="p-0.5 hover:text-[#7C8BFF]"
+                          className="p-0.5 hover:text-[#7C8BFF] disabled:opacity-40"
                         >
                           <Minus className="h-3.5 w-3.5" />
                         </button>
@@ -233,8 +313,9 @@ export function CartDrawer() {
                         </span>
                         <button
                           type="button"
+                          disabled={isBusy}
                           onClick={() => updateQuantity(idx, 1)}
-                          className="p-0.5 hover:text-[#7C8BFF]"
+                          className="p-0.5 hover:text-[#7C8BFF] disabled:opacity-40"
                         >
                           <Plus className="h-3.5 w-3.5" />
                         </button>
@@ -245,30 +326,165 @@ export function CartDrawer() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="border-t border-black/10 p-6">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-[#6E6E73]">Subtotal</span>
-                <span className="text-lg font-bold">
-                  ${cartSubtotal.toFixed(2)}
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-[#6E6E73]">
-                Complimentary express shipping on orders over $250.
-              </p>
-              <button
-                type="button"
-                disabled={processingOrder}
-                onClick={handleCheckout}
-                className="mt-4 flex w-full items-center justify-between rounded-full bg-[#111111] py-3.5 pr-2 pl-6 text-sm font-semibold text-white transition-colors hover:bg-[#1f1f24] disabled:opacity-60"
-              >
-                <span>{processingOrder ? 'Placing Order...' : 'Checkout Now'}</span>
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#7C8BFF] text-white">
-                  <ArrowRight className="h-4 w-4" />
-                </span>
-              </button>
+              {checkoutStep === 'shipping' ? (
+                <form onSubmit={handleCheckout} noValidate className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold tracking-wider text-[#111111] uppercase">
+                      Shipping Details
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutStep('bag')}
+                      className="text-xs font-semibold text-[#6E6E73] hover:text-[#111111]"
+                    >
+                      Back to Bag
+                    </button>
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Full Name"
+                      value={shipping.fullName}
+                      onChange={(e) => {
+                        setShipping((p) => ({ ...p, fullName: e.target.value }));
+                        if (shippingErrors.fullName)
+                          setShippingErrors((p) => ({ ...p, fullName: '' }));
+                      }}
+                      className={`w-full rounded-xl border px-3.5 py-2 text-xs outline-none ${
+                        shippingErrors.fullName
+                          ? 'border-[#E11D48]'
+                          : 'border-black/10 focus:border-[#7C8BFF]'
+                      }`}
+                    />
+                    {shippingErrors.fullName && (
+                      <p className="mt-1 text-[11px] text-[#E11D48]">
+                        {shippingErrors.fullName}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Street Address"
+                      value={shipping.address}
+                      onChange={(e) => {
+                        setShipping((p) => ({ ...p, address: e.target.value }));
+                        if (shippingErrors.address)
+                          setShippingErrors((p) => ({ ...p, address: '' }));
+                      }}
+                      className={`w-full rounded-xl border px-3.5 py-2 text-xs outline-none ${
+                        shippingErrors.address
+                          ? 'border-[#E11D48]'
+                          : 'border-black/10 focus:border-[#7C8BFF]'
+                      }`}
+                    />
+                    {shippingErrors.address && (
+                      <p className="mt-1 text-[11px] text-[#E11D48]">
+                        {shippingErrors.address}
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="City"
+                        value={shipping.city}
+                        onChange={(e) => {
+                          setShipping((p) => ({ ...p, city: e.target.value }));
+                          if (shippingErrors.city)
+                            setShippingErrors((p) => ({ ...p, city: '' }));
+                        }}
+                        className={`w-full rounded-xl border px-3.5 py-2 text-xs outline-none ${
+                          shippingErrors.city
+                            ? 'border-[#E11D48]'
+                            : 'border-black/10 focus:border-[#7C8BFF]'
+                        }`}
+                      />
+                      {shippingErrors.city && (
+                        <p className="mt-1 text-[11px] text-[#E11D48]">
+                          {shippingErrors.city}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Postal Code"
+                        value={shipping.postalCode}
+                        onChange={(e) => {
+                          setShipping((p) => ({
+                            ...p,
+                            postalCode: e.target.value,
+                          }));
+                          if (shippingErrors.postalCode)
+                            setShippingErrors((p) => ({ ...p, postalCode: '' }));
+                        }}
+                        className={`w-full rounded-xl border px-3.5 py-2 text-xs outline-none ${
+                          shippingErrors.postalCode
+                            ? 'border-[#E11D48]'
+                            : 'border-black/10 focus:border-[#7C8BFF]'
+                        }`}
+                      />
+                      {shippingErrors.postalCode && (
+                        <p className="mt-1 text-[11px] text-[#E11D48]">
+                          {shippingErrors.postalCode}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 text-sm">
+                    <span className="text-[#6E6E73]">Total</span>
+                    <span className="text-lg font-bold">
+                      ${cartSubtotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={processingOrder}
+                    className="flex w-full items-center justify-between rounded-full bg-[#111111] py-3.5 pr-2 pl-6 text-sm font-semibold text-white transition-colors hover:bg-[#1f1f24] disabled:opacity-60"
+                  >
+                    <span>
+                      {processingOrder ? 'Placing Order...' : 'Confirm & Place Order'}
+                    </span>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#7C8BFF] text-white">
+                      {processingOrder ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ArrowRight className="h-4 w-4" />
+                      )}
+                    </span>
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-[#6E6E73]">Subtotal</span>
+                    <span className="text-lg font-bold">
+                      ${cartSubtotal.toFixed(2)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-[#6E6E73]">
+                    Complimentary express shipping on orders over $250.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={processingOrder}
+                    onClick={handleCheckout}
+                    className="mt-4 flex w-full items-center justify-between rounded-full bg-[#111111] py-3.5 pr-2 pl-6 text-sm font-semibold text-white transition-colors hover:bg-[#1f1f24] disabled:opacity-60"
+                  >
+                    <span>Proceed to Checkout</span>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#7C8BFF] text-white">
+                      <ArrowRight className="h-4 w-4" />
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}
@@ -279,12 +495,15 @@ export function CartDrawer() {
 
 export function WishlistDrawer() {
   const {
+    products,
     wishlist,
     isWishlistOpen,
     setIsWishlistOpen,
     toggleWishlist,
     addToCart,
     setIsCartOpen,
+    user,
+    requireAuth,
   } = useStore();
   const [loading, setLoading] = useState(true);
 
@@ -297,7 +516,8 @@ export function WishlistDrawer() {
 
   if (!isWishlistOpen) return null;
 
-  const savedProducts = PRODUCTS.filter((p) => wishlist.includes(p.id));
+  const catalog = products.length > 0 ? products : PRODUCTS;
+  const savedProducts = catalog.filter((p) => wishlist.includes(p.id));
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
@@ -322,6 +542,30 @@ export function WishlistDrawer() {
           <div className="flex-1 space-y-4 p-6">
             <DrawerRowSkeleton />
             <DrawerRowSkeleton />
+          </div>
+        ) : !user ? (
+          <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#F3F3F5] text-[#111111]">
+              <Lock className="h-5 w-5" />
+            </div>
+            <p className="mt-4 text-base font-semibold">Sign in to view saved pieces</p>
+            <p className="mt-1 max-w-xs text-sm text-[#6E6E73]">
+              Your wishlist syncs securely to your LOOMY account across devices.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setIsWishlistOpen(false);
+                requireAuth(
+                  () => setIsWishlistOpen(true),
+                  'Sign in to view your saved wishlist pieces.'
+                );
+              }}
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#111111] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#7C8BFF]"
+            >
+              Sign In to Continue
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
         ) : savedProducts.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
@@ -352,10 +596,12 @@ export function WishlistDrawer() {
                   <div className="mt-2.5 flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        addToCart(item);
-                        setIsWishlistOpen(false);
-                        setIsCartOpen(true);
+                      onClick={async () => {
+                        const added = await addToCart(item);
+                        if (added) {
+                          setIsWishlistOpen(false);
+                          setIsCartOpen(true);
+                        }
                       }}
                       className="rounded-full bg-[#111111] px-3.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#7C8BFF]"
                     >
@@ -543,9 +789,19 @@ export function MenuDrawer() {
   );
 }
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
 export function AuthModal() {
-  const { isAuthOpen, setIsAuthOpen, user, signIn, signUp, signOut, showToast } =
-    useStore();
+  const {
+    isAuthOpen,
+    dismissAuthModal,
+    authPromptReason,
+    user,
+    signIn,
+    signUp,
+    signInWithGoogle,
+    signOut,
+  } = useStore();
   const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -555,8 +811,11 @@ export function AuthModal() {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
+  const [googleButtonReady, setGoogleButtonReady] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const googleBtnRef = useRef(null);
 
   useEffect(() => {
     if (isAuthOpen && user) {
@@ -566,12 +825,102 @@ export function AuthModal() {
     }
   }, [isAuthOpen, user]);
 
+  useEffect(() => {
+    if (!isAuthOpen || user || !GOOGLE_CLIENT_ID) {
+      setGoogleButtonReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    const initGoogle = () => {
+      if (cancelled || !window.google?.accounts?.id || !googleBtnRef.current) {
+        return false;
+      }
+      try {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: async (response) => {
+            if (!response?.credential) {
+              setFormError('Google sign-in was cancelled or returned no token.');
+              return;
+            }
+            setFormError('');
+            setGoogleSubmitting(true);
+            try {
+              const res = await signInWithGoogle(response.credential);
+              if (!res.ok) {
+                setFormError(res.error);
+              }
+            } finally {
+              setGoogleSubmitting(false);
+            }
+          },
+        });
+        googleBtnRef.current.innerHTML = '';
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          shape: 'pill',
+          text: mode === 'signup' ? 'signup_with' : 'continue_with',
+          width: 360,
+        });
+        setGoogleButtonReady(true);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (!initGoogle()) {
+      const interval = window.setInterval(() => {
+        if (initGoogle()) window.clearInterval(interval);
+      }, 250);
+      const timeout = window.setTimeout(() => window.clearInterval(interval), 4000);
+      return () => {
+        cancelled = true;
+        window.clearInterval(interval);
+        window.clearTimeout(timeout);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthOpen, user, mode, signInWithGoogle]);
+
   if (!isAuthOpen) return null;
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
     setErrors({});
     setFormError('');
+  };
+
+  const handleFallbackGoogleClick = () => {
+    setFormError('');
+    if (!GOOGLE_CLIENT_ID) {
+      setFormError(
+        'Google Sign-In is not configured yet (VITE_GOOGLE_CLIENT_ID missing). Use email and password below.'
+      );
+      return;
+    }
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt((notification) => {
+        if (
+          notification.isNotDisplayed?.() ||
+          notification.isSkippedMoment?.()
+        ) {
+          setFormError(
+            'Google Sign-In prompt could not open. Please allow third-party sign-in or use email below.'
+          );
+        }
+      });
+    } else {
+      setFormError(
+        'Google Sign-In script is still loading or blocked by your browser.'
+      );
+    }
   };
 
   const validate = () => {
@@ -611,9 +960,6 @@ export function AuthModal() {
         const res = await signIn({ email, password });
         if (!res.ok) {
           setFormError(res.error);
-        } else {
-          setIsAuthOpen(false);
-          showToast(`Welcome back, ${res.user.name}`);
         }
       } else {
         const res = await signUp({ name, email, password });
@@ -623,9 +969,6 @@ export function AuthModal() {
           } else {
             setFormError(res.error);
           }
-        } else {
-          setIsAuthOpen(false);
-          showToast(`Account created — Welcome, ${res.user.name}`);
         }
       }
     } finally {
@@ -640,7 +983,8 @@ export function AuthModal() {
           <LoomyLogo variant="dark" size="sm" />
           <button
             type="button"
-            onClick={() => setIsAuthOpen(false)}
+            onClick={dismissAuthModal}
+            aria-label="Close authentication modal"
             className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3F3F5]"
           >
             <X className="h-4 w-4" />
@@ -665,7 +1009,7 @@ export function AuthModal() {
                 <p className="text-xs text-[#6E6E73]">{user.email}</p>
                 <Link
                   to="/account"
-                  onClick={() => setIsAuthOpen(false)}
+                  onClick={dismissAuthModal}
                   className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#111111] hover:text-[#7C8BFF]"
                 >
                   View Account &amp; Orders <ArrowRight className="h-3.5 w-3.5" />
@@ -682,7 +1026,7 @@ export function AuthModal() {
                       onClick={() => {
                         signOut();
                         setConfirmSignOut(false);
-                        setIsAuthOpen(false);
+                        dismissAuthModal();
                       }}
                       className="flex-1 rounded-full bg-[#E11D48] py-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
                     >
@@ -710,6 +1054,16 @@ export function AuthModal() {
           )
         ) : (
           <>
+            {authPromptReason && (
+              <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-[#7C8BFF]/30 bg-[#7C8BFF]/8 px-3.5 py-2.5 text-xs text-[#111111]">
+                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#7C8BFF]" />
+                <div>
+                  <p className="font-semibold">Sign in required</p>
+                  <p className="text-[#6E6E73]">{authPromptReason}</p>
+                </div>
+              </div>
+            )}
+
             <div className="mt-5 flex rounded-full bg-[#F3F3F5] p-1">
               <button
                 type="button"
@@ -733,6 +1087,53 @@ export function AuthModal() {
               >
                 Sign Up
               </button>
+            </div>
+
+            {/* Google Identity Services */}
+            <div className="mt-4">
+              <div
+                ref={googleBtnRef}
+                className={googleButtonReady ? 'flex justify-center' : 'hidden'}
+              />
+              {!googleButtonReady && (
+                <button
+                  type="button"
+                  disabled={googleSubmitting || isSubmitting}
+                  onClick={handleFallbackGoogleClick}
+                  className="flex w-full items-center justify-center gap-2.5 rounded-full border border-black/15 bg-white py-2.5 text-xs font-semibold text-[#111111] transition-colors hover:bg-[#F6F6F8] disabled:opacity-55"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.3 0 6.08-1.09 8.11-2.96l-3.88-3.05c-1.09.73-2.48 1.16-4.23 1.16-3.25 0-6.01-2.19-7-5.14H1.01v3.14C3.05 21.2 7.24 24 12 24Z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5 14.01c-.25-.73-.39-1.51-.39-2.31s.14-1.58.39-2.31V6.25H1.01A11.99 11.99 0 0 0 0 11.7c0 1.93.46 3.76 1.01 5.45l3.99-3.14Z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.8 0 3.41.62 4.68 1.83l3.51-3.51C18.07 1.19 15.3 0 12 0 7.24 0 3.05 2.8 1.01 6.86l3.99 3.14c.99-2.95 3.75-5.25 7-5.25Z"
+                    />
+                  </svg>
+                  <span>
+                    {googleSubmitting
+                      ? 'Connecting with Google...'
+                      : 'Continue with Google'}
+                  </span>
+                </button>
+              )}
+              <div className="my-4 flex items-center gap-3">
+                <div className="h-px flex-1 bg-black/10" />
+                <span className="text-[10px] font-semibold tracking-widest text-[#6E6E73] uppercase">
+                  or with email
+                </span>
+                <div className="h-px flex-1 bg-black/10" />
+              </div>
             </div>
 
             {formError && (
@@ -866,14 +1267,17 @@ export function AuthModal() {
 
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="mt-2 w-full rounded-full bg-[#111111] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#7C8BFF] disabled:cursor-not-allowed disabled:opacity-55"
+                disabled={isSubmitting || googleSubmitting}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-full bg-[#111111] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#7C8BFF] disabled:cursor-not-allowed disabled:opacity-55"
               >
-                {isSubmitting
-                  ? 'Processing...'
-                  : mode === 'signin'
-                    ? 'Sign In'
-                    : 'Create Account'}
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                <span>
+                  {isSubmitting
+                    ? 'Processing...'
+                    : mode === 'signin'
+                      ? 'Sign In'
+                      : 'Create Account'}
+                </span>
               </button>
             </form>
           </>
@@ -887,10 +1291,31 @@ export function ToastNotification() {
   const { toast } = useStore();
   if (!toast) return null;
 
+  const { message, type = 'success', exiting } = toast;
+
+  const renderIcon = () => {
+    if (type === 'cart') {
+      return <ShoppingBag className="h-4.5 w-4.5 shrink-0 text-[#7C8BFF]" />;
+    }
+    if (type === 'wishlist') {
+      return <Heart className="h-4.5 w-4.5 shrink-0 fill-[#F5A6D8] text-[#F5A6D8]" />;
+    }
+    if (type === 'error') {
+      return <AlertCircle className="h-4.5 w-4.5 shrink-0 text-[#F43F5E]" />;
+    }
+    return <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-[#7C8BFF]" />;
+  };
+
   return (
-    <div className="animate-page-enter fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[#111111] px-5 py-2.5 text-xs font-semibold text-white shadow-xl">
-      <span className="h-2 w-2 rounded-full bg-[#7C8BFF]" />
-      <span>{toast}</span>
+    <div
+      role="status"
+      aria-live="polite"
+      className={`fixed bottom-7 left-1/2 z-50 flex min-w-[260px] max-w-md -translate-x-1/2 items-center gap-3 rounded-2xl border border-white/10 bg-[#111111] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_18px_45px_rgba(0,0,0,0.28)] ${
+        exiting ? 'animate-toast-out' : 'animate-toast-in'
+      }`}
+    >
+      {renderIcon()}
+      <span className="leading-snug">{message}</span>
     </div>
   );
 }

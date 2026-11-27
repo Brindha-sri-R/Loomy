@@ -4,10 +4,12 @@ import { Link, Navigate } from 'react-router-dom';
 import { useStore } from '../context/StoreContext';
 
 export default function AccountPage() {
-  const { user, orders, signOut, updateProfile, showToast } = useStore();
+  const { user, orders, signOut, updateProfile, cancelOrder, showToast } =
+    useStore();
   const [name, setName] = useState(user?.name || '');
   const [saving, setSaving] = useState(false);
   const [confirmOut, setConfirmOut] = useState(false);
+  const [cancellingId, setCancellingId] = useState('');
 
   if (!user) {
     return <Navigate to="/" replace />;
@@ -133,24 +135,67 @@ export default function AccountPage() {
               </div>
             ) : (
               <div className="mt-5 space-y-3">
-                {orders.map((ord) => (
-                  <div
-                    key={ord._id || ord.id}
-                    className="flex items-center justify-between rounded-xl bg-[#F6F6F8] p-4"
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-[#111111]">
-                        Order #{String(ord._id || ord.id).slice(-6).toUpperCase()}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-[#6E6E73]">
-                        {ord.items?.length || 1} item(s) · {ord.status || 'Confirmed'}
-                      </p>
+                {orders.map((ord) => {
+                  const ordId = ord._id || ord.id;
+                  const canCancel = ['Pending', 'Confirmed'].includes(
+                    ord.status || 'Confirmed'
+                  );
+                  return (
+                    <div
+                      key={ordId}
+                      className="rounded-xl bg-[#F6F6F8] p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-bold text-[#111111]">
+                            Order #{String(ordId).slice(-6).toUpperCase()}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-[#6E6E73]">
+                            {ord.items?.length || 1} item(s) ·{' '}
+                            <span
+                              className={
+                                ord.status === 'Cancelled'
+                                  ? 'font-semibold text-[#E11D48]'
+                                  : 'font-semibold text-[#111111]'
+                              }
+                            >
+                              {ord.status || 'Confirmed'}
+                            </span>
+                          </p>
+                          {ord.shippingAddress?.address && (
+                            <p className="mt-1 text-[11px] text-[#6E6E73]">
+                              Ship to: {ord.shippingAddress.fullName},{' '}
+                              {ord.shippingAddress.address},{' '}
+                              {ord.shippingAddress.city}{' '}
+                              {ord.shippingAddress.postalCode}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-extrabold text-[#111111]">
+                            ${Number(ord.totalAmount || ord.total || 0).toFixed(2)}
+                          </span>
+                          {canCancel && (
+                            <button
+                              type="button"
+                              disabled={cancellingId === ordId}
+                              onClick={async () => {
+                                setCancellingId(ordId);
+                                await cancelOrder(ordId);
+                                setCancellingId('');
+                              }}
+                              className="mt-1.5 block text-[11px] font-semibold text-[#6E6E73] hover:text-[#E11D48] disabled:opacity-50"
+                            >
+                              {cancellingId === ordId
+                                ? 'Cancelling...'
+                                : 'Cancel Order'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <span className="text-sm font-extrabold text-[#111111]">
-                      ${Number(ord.totalAmount || ord.total || 0).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
